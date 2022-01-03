@@ -10,79 +10,122 @@ import GameplayKit
 
 class GameScene: SKScene {
     
-    private var label : SKLabelNode?
-    private var spinnyNode : SKShapeNode?
+    var candyTapped: SKSpriteNode!
+    var touched: Bool!
+    var matchedRow: [SKSpriteNode] = []
+    var matchedCol: [SKSpriteNode] = []
+    var matchedRow1: [SKSpriteNode] = []
+    var matchedCol1: [SKSpriteNode] = []
     
     override func didMove(to view: SKView) {
-        
-        // Get label node from scene and store it for use later
-        self.label = self.childNode(withName: "//helloLabel") as? SKLabelNode
-        if let label = self.label {
-            label.alpha = 0.0
-            label.run(SKAction.fadeIn(withDuration: 2.0))
-        }
-        
-        // Create shape node to use during mouse interaction
-        let w = (self.size.width + self.size.height) * 0.05
-        self.spinnyNode = SKShapeNode.init(rectOf: CGSize.init(width: w, height: w), cornerRadius: w * 0.3)
-        
-        if let spinnyNode = self.spinnyNode {
-            spinnyNode.lineWidth = 2.5
-            
-            spinnyNode.run(SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat(Double.pi), duration: 1)))
-            spinnyNode.run(SKAction.sequence([SKAction.wait(forDuration: 0.5),
-                                              SKAction.fadeOut(withDuration: 0.5),
-                                              SKAction.removeFromParent()]))
-        }
+     
+        create_arrayCandy()
     }
     
-    
-    func touchDown(atPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.green
-            self.addChild(n)
-        }
-    }
-    
-    func touchMoved(toPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.blue
-            self.addChild(n)
-        }
-    }
-    
-    func touchUp(atPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.red
-            self.addChild(n)
+    func create_arrayCandy(){
+        let nameCandy: [String] = ["Blue","Green","Orange","Purple","Red","Yellow"]
+        for i in stride(from: -self.size.width/2 + self.size.width/10/2, to: self.size.width/2, by: self.size.width/10){
+            for j in stride(from: -400, to: self.size.width/2, by: self.size.width/10){
+                let name = nameCandy.randomElement()!
+                let candy = SKSpriteNode(texture: SKTexture(imageNamed: name))
+                candy.name = name
+                candy.position = CGPoint(x: i, y: j)
+                addChild(candy)
+            }
         }
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let label = self.label {
-            label.run(SKAction.init(named: "Pulse")!, withKey: "fadeInOut")
+        let touch = touches.first!
+        let location = touch.location(in: self)
+        if let candy = nodes(at: location).first as? SKSpriteNode{
+            candyTapped = candy
+            touched = true
+        }
+    }
+    
+    func create_Candy(Matched: inout [SKSpriteNode]){
+        if Matched.count >= 3{
+            var points: [CGPoint] = []
+            for candy in Matched{
+                points.append(candy.position)
+            }
+            for candy in Matched{
+                candy.removeFromParent()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) {[self] in
+                let nameCandy: [String] = ["Blue","Green","Orange","Purple","Red","Yellow"]
+                for i in 0...points.count - 1{
+                    let name = nameCandy.randomElement()!
+                    if (nodes(at: points[i]).first as? SKSpriteNode) == nil{
+                        let candy = SKSpriteNode(texture: SKTexture(imageNamed: name))
+                        candy.name = name
+                        candy.position = points[i]
+                        addChild(candy)
+                    }
+                }
+            }
+        }
+    }
+    
+    func create_Move(FromNode: SKSpriteNode, ToNode: SKSpriteNode){
+        let pos1 = FromNode.position
+        let pos2 = ToNode.position
+        let move1 = SKAction.move(to: pos2, duration: 0.15)
+        let move2 = SKAction.move(to: pos1, duration: 0.15)
+        let check1 = SKAction.run { [self] in
+            matchedRow.removeAll()
+            matchedCol.removeAll()
+            check(candy: FromNode, x: self.size.width/10, y: 0, candyMatched: &matchedRow)
+            check(candy: FromNode, x: 0, y: self.size.width/10, candyMatched: &matchedCol)
+            create_Candy(Matched: &matchedRow)
+            create_Candy(Matched: &matchedCol)
         }
         
-        for t in touches { self.touchDown(atPoint: t.location(in: self)) }
+        let check2 = SKAction.run { [self] in
+            matchedRow1.removeAll()
+            matchedCol1.removeAll()
+            check(candy: FromNode, x: self.size.width/10, y: 0, candyMatched: &matchedRow1)
+            check(candy: FromNode, x: 0, y: self.size.width/10, candyMatched: &matchedCol1)
+            create_Candy(Matched: &matchedRow1)
+            create_Candy(Matched: &matchedCol1)
+        }
+        let sequence1 = SKAction.sequence([move1, check1])
+        let sequence2 = SKAction.sequence([move2, check2])
+        
+        FromNode.run(sequence1)
+        ToNode.run(sequence2)
+    }
+    
+    func check(candy: SKSpriteNode, x:CGFloat, y:CGFloat, candyMatched: inout [SKSpriteNode]){
+        if let candyTam = nodes(at: CGPoint(x: candy.position.x + x, y: candy.position.y + y)).first as? SKSpriteNode{
+            if !candyMatched.contains(candyTam){
+                if candyTam.name == candy.name{
+                    candyMatched.append(candyTam)
+                    check(candy: candyTam, x: x, y: y, candyMatched: &candyMatched)
+                }
+            }
+        }
+        
+        if let candyTam = nodes(at: CGPoint(x: candy.position.x - x, y: candy.position.y - y)).first as? SKSpriteNode{
+            if !candyMatched.contains(candyTam){
+                if candyTam.name == candy.name{
+                    candyMatched.append(candyTam)
+                    check(candy: candyTam, x: x, y: y, candyMatched: &candyMatched)
+                }
+            }
+        }
+
     }
     
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchMoved(toPoint: t.location(in: self)) }
-    }
-    
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchUp(atPoint: t.location(in: self)) }
-    }
-    
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchUp(atPoint: t.location(in: self)) }
-    }
-    
-    
-    override func update(_ currentTime: TimeInterval) {
-        // Called before each frame is rendered
+        let touch = touches.first!
+        let location = touch.location(in: self)
+        if let candyMove = nodes(at: location).first as? SKSpriteNode{
+            if candyTapped != candyMove && touched && (candyTapped.position.x == candyMove.position.x || candyTapped.position.y == candyMove.position.y){
+                touched = false
+                create_Move(FromNode: candyTapped, ToNode: candyMove)
+            }
+        }
     }
 }
